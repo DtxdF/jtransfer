@@ -25,7 +25,7 @@
 .\"CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 .\"OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 .\"OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-.Dd September 30, 2026
+.Dd October 1, 2026
 .Dt JTRANSFER 1
 .Os
 .Sh NAME
@@ -37,6 +37,7 @@
 .Nm
 .Op Fl r Ns | Ns Fl w
 .Op Fl h
+.Op Fl d Ar workdir
 .Op Fl m Ar mode
 .Op Fl u Ar uid Ns Oo Ns : Ns Ar gid Oc
 .Fl f Ar file
@@ -129,6 +130,15 @@ The content is read from standard input and written to the file specified
 with the
 .Fl f
 option.
+.It Fl d Ar workdir
+Change the working directory.
+.Pp
+By default, and only if
+.Fl u
+is specified, the user's home directory is used. However, if
+.Fl u
+is specified in numeric format and the user information cannot be retrieved, this parameter defaults to
+.Pa / Ns "."
 .It Fl m Ar mode
 File mode.
 .Pp
@@ -136,6 +146,11 @@ File mode.
 is ignored. The file mode specified here will be applied to the created file.
 .It Fl u Ar uid Ns Oo : Ns Ar gid Oc
 Drop privileges after entering the jail.
+.Pp
+.Ar uid
+and
+.Ar gid
+can be specified in symbolic or numeric format.
 .It Fl f Ar file
 File path.
 .It Fl j Ar jid

@@ -34,8 +34,10 @@
 
 #include <err.h>
 #include <errno.h>
+#include <grp.h>
 #include <fcntl.h>
 #include <jail.h>
+#include <pwd.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,9 +49,9 @@
 #   define JTRANSFER_VERSION "dev"
 #endif
 
+#define DEFAULT_UID ((uid_t)0)
+#define DEFAULT_GID ((gid_t)0)
 #define DEFAULT_FILE_MODE "0640"
-
-extern char **environ;
 
 static void version(void);
 static void usage(void);
@@ -67,28 +69,31 @@ main(int argc, char **argv)
     int rc = EX_OK;
     const char *file;
     const char *jail;
-    char *cleanenv;
+    char *workdir;
     char *endptr;
     char *term;
     char *username, *group;
-    const char *workdir;
+    char *pw_dir;
     long luid, lgid;
     uid_t uid;
     gid_t gid;
     mode_t mode;
     mode_t *set;
+    struct passwd *pw;
+    struct group *gr;
 
     read_mode = write_mode = false;
     ch = 0;
-    file = jail = username = NULL;
-    workdir = "/";
+    file = jail = username = workdir = NULL;
+    pw = NULL;
+    pw_dir = "/";
 
     (void)umask(0);
 
     if ((set = setmode(DEFAULT_FILE_MODE)) == NULL)
         err(EX_SOFTWARE, "setmode");
 
-    while ((ch = getopt(argc, argv, "hrwvf:j:m:u:")) != -1) {
+    while ((ch = getopt(argc, argv, "hrwvd:f:j:m:u:")) != -1) {
         switch (ch) {
         case 'h':
             nofollow = true;
@@ -101,6 +106,9 @@ main(int argc, char **argv)
             break;
         case 'v':
             version();
+            break;
+        case 'd':
+            workdir = optarg;
             break;
         case 'f':
             file = optarg;
@@ -132,9 +140,16 @@ main(int argc, char **argv)
 
     mode = getmode(set, 0);
 
+    /* Attach to the jail */
+    jid = jail_getid(jail);
+    if (jid < 0)
+        errx(EX_SOFTWARE, "%s", jail_errmsg);
+    if (jail_attach(jid) == -1)
+        err(EX_SOFTWARE, "jail_attach(%d)", jid);
+
     if (username == NULL) {
-        uid = (uid_t)0;
-        gid = (gid_t)0;
+        uid = DEFAULT_UID;
+        gid = DEFAULT_GID;
     } else {
         if (username[0] == '\0')
             usage();
@@ -143,44 +158,62 @@ main(int argc, char **argv)
         if (group != NULL)
             *group++ = '\0';
 
-        errno = 0;
+        uid = DEFAULT_UID;
+        if (username[0] != '\0') {
+            luid = strtol(username, &endptr, 10);
 
-        luid = strtol(username, &endptr, 10);
+            if (*endptr == '\0') {
+                if (luid < 0 || luid >= (uid_t)-1)
+                    errx(EX_DATAERR, "bad user id");
 
-        if (errno != 0 || endptr == username || *endptr != '\0' || luid < 0 || luid >= (uid_t)-1)
-            errx(EX_DATAERR, "bad user id");
+                uid = (uid_t)luid;
+            } else {
+                pw = getpwnam(username);
 
-        if (group != NULL) {
-            errno = 0;
+                if (pw == NULL)
+                    err(EX_OSERR, "getpwnam(): %s", username);
+            }
+        }
+
+        if (pw == NULL)
+            pw = getpwuid(uid);
+
+        if (pw != NULL) {
+            uid = pw->pw_uid;
+            gid = pw->pw_gid;
+        } else {
+            gid = uid;
+        }
+
+        pw_dir = (pw != NULL ? pw->pw_dir : pw_dir);
+
+        if (group != NULL && group[0] != '\0') {
+            endptr = NULL;
 
             lgid = strtol(group, &endptr, 10);
 
-            if (errno != 0 || endptr == group || *endptr != '\0' || lgid < 0 || lgid >= (gid_t)-1)
-                errx(EX_DATAERR, "bad group id");
-        } else {
-            lgid = luid;
-        }
+            if (*endptr == '\0') {
+                if (lgid < 0 || lgid >= (gid_t)-1)
+                    errx(EX_DATAERR, "bad group id");
 
-        uid = (uid_t)luid;
-        gid = (gid_t)lgid;
+                gid = (gid_t)lgid;
+            } else {
+                gr = getgrnam(group);
+
+                if (gr == NULL)
+                    err(EX_OSERR, "getgrnam(): %s", group);
+
+                gid = gr->gr_gid;
+            }
+        }
+        endpwent();
     }
 
-    /* Attach to the jail */
-    jid = jail_getid(jail);
-    if (jid < 0)
-        errx(EX_SOFTWARE, "%s", jail_errmsg);
-    if (jail_attach(jid) == -1)
-        err(EX_SOFTWARE, "jail_attach(%d)", jid);
+    if (workdir == NULL)
+        workdir = pw_dir;
+
     if (chdir(workdir) == -1)
         err(EX_SOFTWARE, "chdir(): %s", workdir);
-
-    /* Clean user environment */
-    term = getenv("TERM");
-    cleanenv = NULL;
-    environ = &cleanenv;
-    setenv("PATH", "/bin:/usr/bin", 1);
-    if (term != NULL)
-        setenv("TERM", term, 1);
 
     if (setgroups(0, NULL) != 0)
         err(EX_OSERR, "setgroups");
@@ -237,9 +270,10 @@ version(void)
 static void
 usage(void)
 {
-    fprintf(stderr, "%s\n%s\n",
+    fprintf(stderr, "%s\n%s\n%s\n",
         "usage: jtransfer -v",
-        "       jtransfer [-r|-w] [-h] [-m <mode>] [-u <uid>[:<gid>]] -f <file> -j <jid>");
+        "       jtransfer [-r|-w] [-h] [-d <workdir>] [-m <mode>] [-u <uid>[:<gid>]] -f <file>",
+        "                 -j <jid>");
     exit(EX_USAGE);
 }
 
