@@ -239,7 +239,7 @@ usage(void)
 {
     fprintf(stderr, "%s\n%s\n",
         "usage: jtransfer -v",
-        "       jtransfer [-r|-w] [-h] [-m <mode>] [-u <uid>[:<gid>]] -f <file> -j <jail>");
+        "       jtransfer [-r|-w] [-h] [-m <mode>] [-u <uid>[:<gid>]] -f <file> -j <jid>");
     exit(EX_USAGE);
 }
 
