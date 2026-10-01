@@ -148,7 +148,7 @@ main(int argc, char **argv)
         luid = strtol(username, &endptr, 10);
 
         if (errno != 0 || endptr == username || *endptr != '\0' || luid < 0 || luid >= (uid_t)-1)
-            errx(1, "bad user id");
+            errx(EX_DATAERR, "bad user id");
 
         if (group != NULL) {
             errno = 0;
@@ -156,7 +156,7 @@ main(int argc, char **argv)
             lgid = strtol(group, &endptr, 10);
 
             if (errno != 0 || endptr == group || *endptr != '\0' || lgid < 0 || lgid >= (gid_t)-1)
-                errx(1, "bad group id");
+                errx(EX_DATAERR, "bad group id");
         } else {
             lgid = luid;
         }
@@ -168,7 +168,7 @@ main(int argc, char **argv)
     /* Attach to the jail */
     jid = jail_getid(jail);
     if (jid < 0)
-        errx(1, "%s", jail_errmsg);
+        errx(EX_SOFTWARE, "%s", jail_errmsg);
     if (jail_attach(jid) == -1)
         err(EX_SOFTWARE, "jail_attach(%d)", jid);
     if (chdir(workdir) == -1)
