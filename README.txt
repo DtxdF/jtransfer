@@ -3,7 +3,8 @@ NAME
 
 SYNOPSIS
      jtransfer -v
-     jtransfer [-r|-w] [-h] [-m mode] [-u uid[:gid]] -f file -j jid
+     jtransfer [-r|-w] [-h] [-d workdir] [-m mode] [-u uid[:gid]] -f file
+	       -j jid
 
 DESCRIPTION
      jtransfer is a lightweight tool for reading a file from a FreeBSD jail
@@ -70,6 +71,13 @@ DESCRIPTION
 	  The content is read from standard input and written to the file
 	  specified with the -f option.
 
+     -d workdir
+	  Change the working directory.
+
+	  By default, and only if -u is specified, the user's home directory
+	  is used. However, if -u is specified in numeric format and the user
+	  information cannot be retrieved, this parameter defaults to /.
+
      -m mode
 	  File mode.
 
@@ -78,6 +86,8 @@ DESCRIPTION
 
      -u uid[:gid]
 	  Drop privileges after entering the jail.
+
+	  uid and gid can be specified in symbolic or numeric format.
 
      -f file
 	  File path.
