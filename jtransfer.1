@@ -25,7 +25,7 @@
 .\"CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 .\"OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 .\"OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-.Dd October 1, 2026
+.Dd October 07, 2026
 .Dt JTRANSFER 1
 .Os
 .Sh NAME
@@ -38,6 +38,7 @@
 .Op Fl r Ns | Ns Fl w
 .Op Fl h
 .Op Fl d Ar workdir
+.Op Fl F Ar file
 .Op Fl m Ar mode
 .Op Fl u Ar uid Ns Oo Ns : Ns Ar gid Oc
 .Fl f Ar file
@@ -110,7 +111,9 @@ However, unlike
 cannot use
 .Xr copy_file_range 2 Ns ,
 so the file is copied using a more traditional approach, even if you are
-using ZFS as your file system.
+using ZFS as your file system, unless you use the
+.Fl F
+flag.
 .Pp
 The options are as follows:
 .Pp
@@ -139,6 +142,13 @@ is specified, the user's home directory is used. However, if
 .Fl u
 is specified in numeric format and the user information cannot be retrieved, this parameter defaults to
 .Pa / Ns "."
+.It Fl F Ar file
+Depending on whether the operation is in write or read mode, this file
+is used to write or read the content. Unlike writing to standard output
+or reading from standard input, this parameter allows the use of
+.Xr copy_file_range 2
+to take advantage of block cloning when supported by the file system,
+which is far more efficient.
 .It Fl m Ar mode
 File mode.
 .Pp

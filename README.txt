@@ -3,8 +3,8 @@ NAME
 
 SYNOPSIS
      jtransfer -v
-     jtransfer [-r|-w] [-h] [-d workdir] [-m mode] [-u uid[:gid]] -f file
-	       -j jid
+     jtransfer [-r|-w] [-h] [-d workdir] [-F file] [-m mode] [-u uid[:gid]]
+	       -f file -j jid
 
 DESCRIPTION
      jtransfer is a lightweight tool for reading a file from a FreeBSD jail
@@ -55,7 +55,7 @@ DESCRIPTION
      command that is just as efficient as the standard cp(1). However, unlike
      cp(1), jtransfer cannot use copy_file_range(2), so the file is copied
      using a more traditional approach, even if you are using ZFS as your file
-     system.
+     system, unless you use the -F flag.
 
      The options are as follows:
 
@@ -77,6 +77,14 @@ DESCRIPTION
 	  By default, and only if -u is specified, the user's home directory
 	  is used. However, if -u is specified in numeric format and the user
 	  information cannot be retrieved, this parameter defaults to /.
+
+     -F file
+	  Depending on whether the operation is in write or read mode, this
+	  file is used to write or read the content. Unlike writing to
+	  standard output or reading from standard input, this parameter
+	  allows the use of copy_file_range(2) to take advantage of block
+	  cloning when supported by the file system, which is far more
+	  efficient.
 
      -m mode
 	  File mode.

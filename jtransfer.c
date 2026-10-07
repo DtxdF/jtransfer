@@ -62,12 +62,14 @@ main(int argc, char **argv)
 {
     bool nofollow = false;
     bool read_mode, write_mode;
-	ssize_t wcount;
+    bool use_copy_file_range = true;
+    ssize_t wcount;
     int ch;
     int jid;
-    int from_fd, to_fd, close_fd;
+    int from_fd, to_fd, close_fd1, close_fd2;
     int rc = EX_OK;
     const char *file;
+    const char *target;
     const char *jail;
     char *workdir;
     char *endptr;
@@ -82,9 +84,10 @@ main(int argc, char **argv)
     struct passwd *pw;
     struct group *gr;
 
+    close_fd2 = -1;
     read_mode = write_mode = false;
     ch = 0;
-    file = jail = username = workdir = NULL;
+    target = file = jail = username = workdir = NULL;
     pw = NULL;
     pw_dir = "/";
 
@@ -93,7 +96,7 @@ main(int argc, char **argv)
     if ((set = setmode(DEFAULT_FILE_MODE)) == NULL)
         err(EX_SOFTWARE, "setmode");
 
-    while ((ch = getopt(argc, argv, "hrwvd:f:j:m:u:")) != -1) {
+    while ((ch = getopt(argc, argv, "hrwvd:F:f:j:m:u:")) != -1) {
         switch (ch) {
         case 'h':
             nofollow = true;
@@ -109,6 +112,9 @@ main(int argc, char **argv)
             break;
         case 'd':
             workdir = optarg;
+            break;
+        case 'F':
+            target = optarg;
             break;
         case 'f':
             file = optarg;
@@ -139,6 +145,28 @@ main(int argc, char **argv)
         usage();
 
     mode = getmode(set, 0);
+
+    if (read_mode) {
+        if (target == NULL) {
+            to_fd = STDOUT_FILENO;
+        } else {
+            to_fd = open(target, O_WRONLY | O_TRUNC | O_CREAT | (nofollow ? O_NOFOLLOW : 0), mode);
+            if (to_fd == -1)
+                err(EX_SOFTWARE, "open(): %s", target);
+
+            close_fd2 = to_fd;
+        }
+    } else {
+        if (target == NULL) {
+            from_fd = STDIN_FILENO;
+        } else {
+            from_fd = open(target, O_RDONLY | (nofollow ? O_NOFOLLOW : 0), 0);
+            if (from_fd == -1)
+                err(EX_SOFTWARE, "open(): %s", target);
+
+            close_fd2 = from_fd;
+        }
+    }
 
     /* Attach to the jail */
     jid = jail_getid(jail);
@@ -222,40 +250,49 @@ main(int argc, char **argv)
     if (setuid(uid) != 0)
         err(EX_OSERR, "setuid");
 
-    if (read_mode) { /* AKA read mode */
-        to_fd = STDOUT_FILENO;
-
-        if ((from_fd = open(file, O_RDONLY | (nofollow ? O_NOFOLLOW : 0), 0)) == -1)
+    if (read_mode) {
+        from_fd = open(file, O_RDONLY | (nofollow ? O_NOFOLLOW : 0), 0);
+        if (from_fd == -1)
             err(EX_SOFTWARE, "open(): %s", file);
 
-        close_fd = from_fd;
+        close_fd1 = from_fd;
     } else {
-        from_fd = STDIN_FILENO;
-
-		to_fd = open(file, O_WRONLY | O_TRUNC | O_CREAT | (nofollow ? O_NOFOLLOW : 0), mode);
+        to_fd = open(file, O_WRONLY | O_TRUNC | O_CREAT | (nofollow ? O_NOFOLLOW : 0), mode);
         if (to_fd == -1)
             err(EX_SOFTWARE, "open(): %s", file);
 
-        close_fd = to_fd;
+        close_fd1 = to_fd;
     }
 
-	do {
-        wcount = copy_fallback(from_fd, to_fd);
-		if (wcount < 0 && errno != EINTR)
-			break;
-	} while (wcount != 0);
-	if (wcount < 0) {
-		warn("%s", file);
+    do {
+        if (use_copy_file_range) {
+            wcount = copy_file_range(from_fd, NULL,
+                to_fd, NULL, SSIZE_MAX, 0);
+            if (wcount < 0 && errno == EINVAL) {
+                /* probably a non-seekable descriptor */
+                use_copy_file_range = false;
+            }
+        }
+        if (!use_copy_file_range)
+            wcount = copy_fallback(from_fd, to_fd);
+        if (wcount < 0 && errno != EINTR)
+            break;
+    } while (wcount != 0);
+    if (wcount < 0) {
+        warn("%s", file);
 
         rc = EX_SOFTWARE;
     }
 
     /* Report errors on write-mode only. */
-    if (close(close_fd) == -1 && write_mode) {
+    if (close(close_fd1) == -1 && write_mode) {
         warn("close()");
 
         rc = EX_SOFTWARE;
     }
+
+    if (close_fd2 != -1)
+        (void)close(close_fd2);
 
     return (rc);
 }
@@ -272,8 +309,8 @@ usage(void)
 {
     fprintf(stderr, "%s\n%s\n%s\n",
         "usage: jtransfer -v",
-        "       jtransfer [-r|-w] [-h] [-d <workdir>] [-m <mode>] [-u <uid>[:<gid>]] -f <file>",
-        "                 -j <jid>");
+        "       jtransfer [-r|-w] [-h] [-d <workdir>] [-F <file>] [-m <mode>] [-u <uid>[:<gid>]]",
+        "                 -f <file> -j <jid>");
     exit(EX_USAGE);
 }
 
